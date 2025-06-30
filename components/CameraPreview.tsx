@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
+  Pressable,
 } from 'react-native';
 import { CameraView, Camera } from 'expo-camera';
 import * as Location from 'expo-location';
@@ -23,22 +24,28 @@ export default function CameraPreview({ onExit }: Props) {
   const [simulationStarted, setSimulationStarted] = useState(false);
   const [direction, setDirection] = useState<string | null>(null);
   const [dialogMessage, setDialogMessage] = useState<string | null>(null);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
   const glowOpacity = useRef(new Animated.Value(0)).current;
 
   const cameraRef = useRef<CameraViewRef>(null);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
-  const simulationTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const dialogTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const steps = [
+    { type: 'message', value: '🚪 Open the door and get inside' },
+    { type: 'direction', value: 'right' },
+    { type: 'direction', value: 'right' },
+    { type: 'direction', value: 'right' },
+    { type: 'message', value: '🎯 Friend is right here!' },
+  ];
 
   useEffect(() => {
     (async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
       setHasCameraPermission(status === 'granted');
     })();
-  }, []);
 
-  useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       setHasLocationPermission(status === 'granted');
@@ -48,29 +55,6 @@ export default function CameraPreview({ onExit }: Props) {
       locationSubscription.current?.remove();
     };
   }, []);
-
-  const startSimulation = () => {
-    setSimulationStarted(true);
-    // showDialogMessage('🔁 Simulation started...');
-
-    const steps = [
-      { delay: 7000, message: '🚪 Open the door and get inside' },
-      { delay: 17000, direction: 'right' },
-      { delay: 25000, direction: 'right' },
-      { delay: 29000, direction: 'right' },
-      { delay: 31000, message: 'Friend is right here!' },
-    ];
-
-    simulationTimers.current = steps.map((step) =>
-      setTimeout(() => {
-        if (step.message) {
-          showDialogMessage(step.message);
-        } else if (step.direction) {
-          animateGlow(step.direction);
-        }
-      }, step.delay)
-    );
-  };
 
   const showDialogMessage = (message: string) => {
     setDialogMessage(message);
@@ -98,12 +82,18 @@ export default function CameraPreview({ onExit }: Props) {
     ]).start(() => setDirection(null));
   };
 
-  useEffect(() => {
-    return () => {
-      simulationTimers.current.forEach(clearTimeout);
-      if (dialogTimer.current) clearTimeout(dialogTimer.current);
-    };
-  }, []);
+  const handleScreenPress = () => {
+    if (!simulationStarted) return;
+    if (currentStepIndex >= steps.length) return;
+
+    const step = steps[currentStepIndex];
+    if (step.type === 'message') {
+      showDialogMessage(step.value);
+    } else if (step.type === 'direction') {
+      animateGlow(step.value);
+    }
+    setCurrentStepIndex((prev) => prev + 1);
+  };
 
   const getDirectionOverlay = (dir: string | null) => {
     if (!dir) return null;
@@ -135,17 +125,17 @@ export default function CameraPreview({ onExit }: Props) {
   }
 
   return (
-    <View style={StyleSheet.absoluteFillObject}>
+    <Pressable style={StyleSheet.absoluteFillObject} onPress={handleScreenPress}>
       <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} facing="back" />
 
       {/* Meters Display */}
-      <View style={styles.meterBox}>
+      <View style={styles.meterBox} pointerEvents="none">
         <Text style={styles.meterText}>0.0 meters away</Text>
       </View>
 
       {/* Dialog Message */}
       {dialogMessage && (
-        <View style={styles.centerDialog}>
+        <View style={styles.centerDialog} pointerEvents="none">
           <Text style={styles.dialogText}>{dialogMessage}</Text>
         </View>
       )}
@@ -155,20 +145,27 @@ export default function CameraPreview({ onExit }: Props) {
 
       {/* Start Button */}
       {!simulationStarted && (
-        <View style={styles.centeredRow}>
-          <TouchableOpacity onPress={startSimulation} style={styles.playButton}>
+        <View style={styles.centeredRow} pointerEvents="box-none">
+          <TouchableOpacity
+            onPress={() => {
+              setSimulationStarted(true);
+              setCurrentStepIndex(0);
+              handleScreenPress();
+            }}
+            style={styles.playButton}
+          >
             <Ionicons name="play" size={28} color="white" />
           </TouchableOpacity>
         </View>
       )}
 
       {/* Exit Button */}
-      <View style={styles.centeredRowBottom}>
+      <View style={styles.centeredRowBottom} pointerEvents="box-none">
         <TouchableOpacity onPress={onExit} style={styles.exitButton}>
           <Text style={styles.exitText}>Exit AR</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
