@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import { CameraView, Camera } from 'expo-camera';
 import * as Location from 'expo-location';
-import { Ionicons } from '@expo/vector-icons';
 
 interface Props {
   onExit: () => void;
@@ -25,9 +24,10 @@ export default function CameraPreview({ onExit }: Props) {
   const [direction, setDirection] = useState<string | null>(null);
   const [dialogMessage, setDialogMessage] = useState<string | null>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [notificationVisible, setNotificationVisible] = useState(false);
+  const [firstTapHappened, setFirstTapHappened] = useState(false);
 
   const glowOpacity = useRef(new Animated.Value(0)).current;
-
   const cameraRef = useRef<CameraViewRef>(null);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
   const dialogTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -37,7 +37,7 @@ export default function CameraPreview({ onExit }: Props) {
     { type: 'direction', value: 'right' },
     { type: 'direction', value: 'right' },
     { type: 'direction', value: 'right' },
-    { type: 'message', value: '🎯 Friend is right here!' },
+    { type: 'message', value: '🎯 Oanh is right here!' },
   ];
 
   useEffect(() => {
@@ -59,39 +59,31 @@ export default function CameraPreview({ onExit }: Props) {
   const showDialogMessage = (message: string) => {
     setDialogMessage(message);
     if (dialogTimer.current) clearTimeout(dialogTimer.current);
-    dialogTimer.current = setTimeout(() => {
-      setDialogMessage(null);
-    }, 3000);
+    dialogTimer.current = setTimeout(() => setDialogMessage(null), 3000);
   };
 
   const animateGlow = (dir: string) => {
     setDirection(dir);
     glowOpacity.setValue(0);
     Animated.sequence([
-      Animated.timing(glowOpacity, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
+      Animated.timing(glowOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
       Animated.delay(800),
-      Animated.timing(glowOpacity, {
-        toValue: 0,
-        duration: 600,
-        useNativeDriver: true,
-      }),
+      Animated.timing(glowOpacity, { toValue: 0, duration: 600, useNativeDriver: true }),
     ]).start(() => setDirection(null));
   };
 
   const handleScreenPress = () => {
-    if (!simulationStarted) return;
-    if (currentStepIndex >= steps.length) return;
+    if (!firstTapHappened) {
+      setNotificationVisible(true);
+      setFirstTapHappened(true);
+      return;
+    }
+
+    if (notificationVisible || !simulationStarted || currentStepIndex >= steps.length) return;
 
     const step = steps[currentStepIndex];
-    if (step.type === 'message') {
-      showDialogMessage(step.value);
-    } else if (step.type === 'direction') {
-      animateGlow(step.value);
-    }
+    if (step.type === 'message') showDialogMessage(step.value);
+    if (step.type === 'direction') animateGlow(step.value);
     setCurrentStepIndex((prev) => prev + 1);
   };
 
@@ -117,8 +109,8 @@ export default function CameraPreview({ onExit }: Props) {
     return (
       <View style={styles.centered}>
         <Text className="text-white mb-4">Permission denied.</Text>
-        <TouchableOpacity onPress={onExit} style={styles.button}>
-          <Text className="text-white">Exit</Text>
+        <TouchableOpacity onPress={onExit} style={styles.exitButton}>
+          <Text style={styles.exitText}>Exit</Text>
         </TouchableOpacity>
       </View>
     );
@@ -129,9 +121,11 @@ export default function CameraPreview({ onExit }: Props) {
       <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} facing="back" />
 
       {/* Meters Display */}
-      <View style={styles.meterBox} pointerEvents="none">
-        <Text style={styles.meterText}>0.0 meters away</Text>
-      </View>
+      {simulationStarted && (
+        <View style={styles.meterBox} pointerEvents="none">
+          <Text style={styles.meterText}>0.0 meters away</Text>
+        </View>
+      )}
 
       {/* Dialog Message */}
       {dialogMessage && (
@@ -143,28 +137,41 @@ export default function CameraPreview({ onExit }: Props) {
       {/* Glow Directions */}
       {getDirectionOverlay(direction)}
 
-      {/* Start Button */}
-      {!simulationStarted && (
-        <View style={styles.centeredRow} pointerEvents="box-none">
-          <TouchableOpacity
-            onPress={() => {
-              setSimulationStarted(true);
-              setCurrentStepIndex(0);
-              handleScreenPress();
-            }}
-            style={styles.playButton}
-          >
-            <Ionicons name="play" size={28} color="white" />
+      {/* Exit Button */}
+      {simulationStarted && (
+        <View style={styles.centeredRowBottom} pointerEvents="box-none">
+          <TouchableOpacity onPress={onExit} style={styles.exitButton}>
+            <Text style={styles.exitText}>Exit AR</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Exit Button */}
-      <View style={styles.centeredRowBottom} pointerEvents="box-none">
-        <TouchableOpacity onPress={onExit} style={styles.exitButton}>
-          <Text style={styles.exitText}>Exit AR</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Notification Box */}
+      {notificationVisible && (
+        <View style={styles.notificationBox}>
+          <Text style={styles.notificationText}>
+            Hey Olari we noticed that you're getting a bit bored.. We recognized that, Oanh who you met at a pub a month ago is also here alone and she is dancing in the middle of the crowd. She's open to connecting. Do you wanna go find her?
+          </Text>
+          <View style={styles.notificationButtons}>
+            <TouchableOpacity
+              onPress={() => {
+                setNotificationVisible(false);
+                setSimulationStarted(true);
+                setCurrentStepIndex(0);
+              }}
+              style={styles.playButton}
+            >
+              <Text style={{ color: 'white' }}>Yes, start tracking</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setNotificationVisible(false)}
+              style={styles.exitButton}
+            >
+              <Text style={{ color: 'white' }}>No</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -210,19 +217,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
-  centeredRow: {
-    position: 'absolute',
-    bottom: 110,
-    width: '100%',
-    alignItems: 'center',
-  },
-  playButton: {
-    backgroundColor: 'rgba(0,60,150,0.3)',
-    borderColor: 'rgba(0,150,255,0.5)',
-    borderWidth: 1,
-    padding: 12,
-    borderRadius: 50,
-  },
   centeredRowBottom: {
     position: 'absolute',
     bottom: 30,
@@ -240,6 +234,14 @@ const styles = StyleSheet.create({
   exitText: {
     color: 'white',
     fontSize: 18,
+  },
+  playButton: {
+    backgroundColor: 'rgba(0,60,150,0.3)',
+    borderColor: 'rgba(0,150,255,0.5)',
+    borderWidth: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 16,
   },
   rightGlow: {
     position: 'absolute',
@@ -272,5 +274,27 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 60,
     backgroundColor: 'rgba(0,255,100,0.4)',
+  },
+  notificationBox: {
+    position: 'absolute',
+    top: 80,
+    marginHorizontal: 20,
+    backgroundColor: 'rgba(0,60,150,0.3)',
+    borderColor: 'rgba(0,150,255,0.5)',
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    borderRadius: 20,
+  },
+  notificationText: {
+    color: 'white',
+    fontSize: 15,
+    textAlign: 'left',
+  },
+  notificationButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 16,
   },
 });
